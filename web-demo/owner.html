@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TrustTab — Owner Dashboard (Prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16233A;
+    --ink-soft:#4B5768;
+    --paper:#FFFFFF;
+    --bg:#EEF1F5;
+    --line:#DDE3EC;
+    --trust:#0F6E5C;
+    --trust-dark:#0B5445;
+    --amber:#D98E2B;
+    --danger:#B3432B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--ink);
+    padding:32px 16px;
+  }
+  .wrap{ max-width:720px; margin:0 auto; }
+  .eyebrow{ font-size:13px; color:var(--ink-soft); margin:0 0 4px 2px; }
+  h1{ font-size:22px; margin:0 0 24px 2px; letter-spacing:-0.01em; }
+
+  .card{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:20px 22px;
+    box-shadow:0 1px 2px rgba(22,35,58,0.06);
+    margin-bottom:18px;
+  }
+  .card h2{ font-size:15px; margin:0 0 14px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .field{ flex:1; min-width:120px; }
+  label{ display:block; font-size:12.5px; font-weight:500; color:var(--ink-soft); margin-bottom:5px; }
+  input, select{
+    width:100%;
+    padding:9px 11px;
+    border:1px solid var(--line);
+    border-radius:7px;
+    font-size:14px;
+    font-family:inherit;
+    color:var(--ink);
+    background:#FBFCFD;
+  }
+  button{
+    padding:9px 16px;
+    border:none;
+    border-radius:7px;
+    background:var(--trust);
+    color:white;
+    font-size:14px;
+    font-weight:600;
+    font-family:inherit;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  button:hover{ background:var(--trust-dark); }
+  button.ghost{
+    background:none;
+    color:var(--trust-dark);
+    border:1px solid var(--trust);
+  }
+  button.ghost:hover{ background:#F0F8F6; }
+  button.small{ padding:6px 10px; font-size:12.5px; }
+
+  table{ width:100%; border-collapse:collapse; }
+  th, td{ text-align:left; padding:10px 8px; font-size:13.5px; border-bottom:1px solid var(--line); }
+  th{ color:var(--ink-soft); font-weight:600; font-size:12px; text-transform:none; }
+  td.id{ font-family:'JetBrains Mono',monospace; font-size:12px; color:var(--ink-soft); }
+  .empty{ padding:28px 8px; text-align:center; color:var(--ink-soft); font-size:14px; }
+  .status-line{ font-size:12.5px; color:var(--ink-soft); margin-top:6px; }
+  .pill{
+    display:inline-block;
+    font-size:11px;
+    font-weight:600;
+    color:var(--trust-dark);
+    background:#E5F3EF;
+    padding:2px 8px;
+    border-radius:999px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">TrustTab prototype — owner side</p>
+  <h1>Shop dashboard</h1>
+
+  <div class="card">
+    <h2>Backend</h2>
+    <div class="row">
+      <div class="field">
+        <label for="apiUrl">Backend URL</label>
+        <input id="apiUrl" value="http://localhost:4000" />
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Register a new shop</h2>
+    <div class="row">
+      <div class="field"><label>Name</label><input id="newName" placeholder="My Kirana Store" /></div>
+      <div class="field"><label>Latitude</label><input id="newLat" placeholder="12.9698" /></div>
+      <div class="field"><label>Longitude</label><input id="newLng" placeholder="79.1559" /></div>
+      <div class="field"><label>Radius (m)</label><input id="newRadius" placeholder="60" value="60" /></div>
+      <button id="createShopBtn">Register</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Active shop</h2>
+    <div class="row">
+      <div class="field">
+        <label for="shopSelect">Select a shop</label>
+        <select id="shopSelect"></select>
+      </div>
+      <button class="ghost" id="refreshShopsBtn">Refresh shop list</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Customers currently checked in <span class="pill" id="countPill">0</span></h2>
+    <div id="tableWrap"></div>
+    <div class="status-line" id="statusLine">Auto-refreshing every 4s…</div>
+  </div>
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let shops = [];
+  let pollTimer = null;
+
+  function apiUrl() { return $('apiUrl').value.replace(/\/$/, ''); }
+
+  async function loadShops(selectId) {
+    try {
+      const res = await fetch(apiUrl() + '/api/shops');
+      shops = await res.json();
+      const sel = $('shopSelect');
+      sel.innerHTML = shops
+        .map((s) => `<option value="${s.id}">${s.name} (${s.radius_m}m radius)</option>`)
+        .join('');
+      if (selectId) sel.value = selectId;
+      if (shops.length === 0) {
+        $('tableWrap').innerHTML = '<div class="empty">No shops registered yet — add one above.</div>';
+      } else {
+        restartPolling();
+      }
+    } catch (err) {
+      $('statusLine').textContent = 'Could not reach backend at ' + apiUrl() + ' — is it running?';
+    }
+  }
+
+  async function loadActive() {
+    const shopId = $('shopSelect').value;
+    if (!shopId) return;
+    try {
+      const res = await fetch(apiUrl() + `/api/shops/${shopId}/active`);
+      const rows = await res.json();
+      $('countPill').textContent = rows.length;
+
+      if (rows.length === 0) {
+        $('tableWrap').innerHTML = '<div class="empty">No one currently checked in at this shop.</div>';
+        return;
+      }
+
+      const now = Date.now();
+      $('tableWrap').innerHTML = `
+        <table>
+          <thead><tr><th>Customer</th><th>Temp ID</th><th>Expires in</th><th></th></tr></thead>
+          <tbody>
+            ${rows
+              .map((r) => {
+                const minsLeft = Math.max(0, Math.round((r.expires_at - now) / 60000));
+                return `<tr>
+                  <td>${r.customer_name}</td>
+                  <td class="id">${r.temp_id.slice(0, 8)}…</td>
+                  <td>${minsLeft} min</td>
+                  <td><button class="small ghost" onclick="markLeft('${r.temp_id}')">Mark as left</button></td>
+                </tr>`;
+              })
+              .join('')}
+          </tbody>
+        </table>`;
+      $('statusLine').textContent = 'Last updated ' + new Date().toLocaleTimeString();
+    } catch (err) {
+      $('statusLine').textContent = 'Could not reach backend — is it running?';
+    }
+  }
+
+  window.markLeft = async (tempId) => {
+    await fetch(apiUrl() + `/api/checkin/${tempId}/leave`, { method: 'POST' });
+    loadActive();
+  };
+
+  function restartPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    loadActive();
+    pollTimer = setInterval(loadActive, 4000);
+  }
+
+  $('createShopBtn').addEventListener('click', async () => {
+    const body = {
+      name: $('newName').value.trim(),
+      lat: parseFloat($('newLat').value),
+      lng: parseFloat($('newLng').value),
+      radius_m: parseFloat($('newRadius').value) || 60,
+    };
+    if (!body.name || Number.isNaN(body.lat) || Number.isNaN(body.lng)) {
+      alert('Name, latitude and longitude are required.');
+      return;
+    }
+    const res = await fetch(apiUrl() + '/api/shops', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    $('newName').value = '';
+    $('newLat').value = '';
+    $('newLng').value = '';
+    await loadShops(data.id);
+  });
+
+  $('shopSelect').addEventListener('change', restartPolling);
+  $('refreshShopsBtn').addEventListener('click', () => loadShops($('shopSelect').value));
+
+  loadShops();
+</script>
+</body>
+</html>

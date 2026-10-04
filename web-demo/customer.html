@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TrustTab — Customer Check-In (Prototype)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#16233A;
+    --ink-soft:#4B5768;
+    --paper:#FFFFFF;
+    --bg:#EEF1F5;
+    --line:#DDE3EC;
+    --trust:#0F6E5C;
+    --trust-dark:#0B5445;
+    --amber:#D98E2B;
+    --danger:#B3432B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    min-height:100vh;
+    background:var(--bg);
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:32px 16px;
+  }
+  .wrap{ width:100%; max-width:420px; }
+  .eyebrow{
+    font-size:13px;
+    color:var(--ink-soft);
+    margin:0 0 4px 2px;
+  }
+  h1{
+    font-size:22px;
+    margin:0 0 24px 2px;
+    letter-spacing:-0.01em;
+  }
+  .card{
+    background:var(--paper);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:24px;
+    box-shadow:0 1px 2px rgba(22,35,58,0.06);
+  }
+  label{
+    display:block;
+    font-size:13px;
+    font-weight:500;
+    color:var(--ink-soft);
+    margin:14px 0 6px;
+  }
+  label:first-of-type{margin-top:0;}
+  input{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:7px;
+    font-size:15px;
+    font-family:inherit;
+    color:var(--ink);
+    background:#FBFCFD;
+  }
+  input:focus{ outline:2px solid var(--trust); outline-offset:1px; }
+  .coords{ display:flex; gap:10px; }
+  .coords > div{ flex:1; }
+  .use-location{
+    margin-top:10px;
+    background:none;
+    border:none;
+    color:var(--trust-dark);
+    font-size:13px;
+    font-weight:600;
+    padding:0;
+    cursor:pointer;
+    text-decoration:underline;
+    text-underline-offset:2px;
+  }
+  button.primary{
+    width:100%;
+    margin-top:20px;
+    padding:13px;
+    border:none;
+    border-radius:7px;
+    background:var(--trust);
+    color:white;
+    font-size:15px;
+    font-weight:600;
+    font-family:inherit;
+    cursor:pointer;
+  }
+  button.primary:hover{ background:var(--trust-dark); }
+  button.primary:disabled{ background:#9BAAB8; cursor:default; }
+
+  .result{ margin-top:20px; }
+  .token{
+    border:1.5px dashed var(--trust);
+    border-radius:10px;
+    padding:18px;
+    background:#F3FAF8;
+    position:relative;
+  }
+  .token .label{ font-size:12px; color:var(--trust-dark); font-weight:600; }
+  .token .id{
+    font-family:'JetBrains Mono',monospace;
+    font-size:15px;
+    font-weight:700;
+    color:var(--ink);
+    word-break:break-all;
+    margin:6px 0 12px;
+  }
+  .token .meta{ font-size:13px; color:var(--ink-soft); line-height:1.6; }
+  .token .meta b{ color:var(--ink); }
+  .out-of-range{
+    border:1px solid #EAD3C8;
+    background:#FBF3EE;
+    color:var(--danger);
+    border-radius:10px;
+    padding:16px;
+    font-size:14px;
+  }
+  .error{ color:var(--danger); font-size:13px; margin-top:10px; }
+  .note{
+    margin-top:18px;
+    font-size:12.5px;
+    color:var(--ink-soft);
+    line-height:1.6;
+  }
+  .note code{
+    background:#E7EBF1;
+    padding:1px 5px;
+    border-radius:4px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:11.5px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">TrustTab prototype — customer side</p>
+  <h1>Check in at a shop</h1>
+
+  <div class="card">
+    <label for="apiUrl">Backend URL</label>
+    <input id="apiUrl" value="http://localhost:4000" />
+
+    <label for="custName">Your name</label>
+    <input id="custName" placeholder="e.g. Zider" value="Zider" />
+
+    <label>Your location</label>
+    <div class="coords">
+      <div>
+        <input id="lat" placeholder="Latitude" value="12.9698" />
+      </div>
+      <div>
+        <input id="lng" placeholder="Longitude" value="79.1559" />
+      </div>
+    </div>
+    <button class="use-location" id="useLocationBtn" type="button">Use my device's current location instead</button>
+
+    <button class="primary" id="checkinBtn">Check in</button>
+
+    <div id="result" class="result" style="display:none;"></div>
+  </div>
+
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const customerId = 'demo-customer-' + Math.random().toString(36).slice(2, 8);
+
+  $('useLocationBtn').addEventListener('click', () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not available in this browser/context.');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        $('lat').value = pos.coords.latitude;
+        $('lng').value = pos.coords.longitude;
+      },
+      (err) => alert('Could not get location: ' + err.message)
+    );
+  });
+
+  $('checkinBtn').addEventListener('click', async () => {
+    const apiUrl = $('apiUrl').value.replace(/\/$/, '');
+    const customerName = $('custName').value.trim() || 'Guest';
+    const lat = parseFloat($('lat').value);
+    const lng = parseFloat($('lng').value);
+    const resultEl = $('result');
+    const btn = $('checkinBtn');
+
+    if (Number.isNaN(lat) || Number.isNaN(lng)) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<div class="error">Enter valid latitude and longitude.</div>';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Checking in…';
+
+    try {
+      const res = await fetch(apiUrl + '/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId, customerName, lat, lng }),
+      });
+      const data = await res.json();
+      resultEl.style.display = 'block';
+
+      if (data.inRange) {
+        resultEl.innerHTML = `
+          <div class="token">
+            <div class="label">${data.reused ? 'ACTIVE TEMPORARY ID' : 'NEW TEMPORARY ID ISSUED'}</div>
+            <div class="id">${data.tempId}</div>
+            <div class="meta">
+              Shop: <b>${data.shopName}</b><br/>
+              Distance: <b>${data.distanceMeters} m</b> from shop center<br/>
+              Expires: <b>${new Date(data.expiresAt).toLocaleTimeString()}</b>
+            </div>
+          </div>`;
+      } else {
+        resultEl.innerHTML = `<div class="out-of-range">${data.message || 'Not near a participating shop.'}</div>`;
+      }
+    } catch (err) {
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = `<div class="error">Could not reach backend at ${apiUrl}. Is it running? (${err.message})</div>`;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Check in';
+    }
+  });
+</script>
+</body>
+</html>
